@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Previsão de Diagnóstico - Campos Individuais</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; line-height: 1.6; }
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); /* Cria colunas responsivas */
+            gap: 15px; /* Espaço entre os itens */
+            margin-bottom: 20px;
+        }
+        .feature-item {
+            display: flex; /* Alinha label e input na mesma linha */
+            flex-direction: column; /* Stack label on top of input */
+        }
+        .feature-item label {
+            margin-bottom: 5px; /* Espaço entre label e input */
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        .feature-item input {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box; /* Inclui padding e border no tamanho total */
+            width: 100%; /* Input preenche o container */
+        }
+        button {
+            display: block; /* Botão numa linha própria */
+            width: 200px; /* Largura fixa para o botão */
+            margin: 20px auto; /* Centra o botão */
+            padding: 12px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+         button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #resultado {
+            margin-top: 30px;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            min-height: 2em; /* Reserva espaço para o resultado */
+        }
+        #resultado.benigno { color: green; font-weight: bold; }
+        #resultado.maligno { color: red; font-weight: bold; }
+        #resultado.loading { color: black; font-weight: normal; }
+        #resultado.error { color: red; font-weight: bold; }
+        .loading-message { text-align: center; font-style: italic; color: #555; }
+    </style>
+</head>
+<body>
+
+    <h1>Previsão do Diagnóstico de Cancro da Mama</h1>
+
+    <p>Por favor, insira os valores para cada feature abaixo:</p>
+
+    <div id="featureInputs" class="feature-grid">
+        <!-- Os campos de input serão gerados aqui pelo JavaScript -->
+        <div class="loading-message">A carregar nomes das features...</div>
+    </div>
+
+    <button id="predictButton" disabled>Carregando...</button>
+
+    <div id="resultado"></div>
+
+    <script>
+        // Substitua pela sua URL pública do ngrok e o caminho para o endpoint POST
+        const apiUrl = '/predict/';
+	const featuresUrl = '/features';
+
+        const featureInputsDiv = document.getElementById('featureInputs');
+        const predictButton = document.getElementById('predictButton');
+        const resultadoDiv = document.getElementById('resultado');
+
+        let expectedFeatureNames = [];
+
+        // Função para obter a lista de features da API e criar os campos de input
+        async function fetchAndCreateInputs() {
+            try {
+                const response = await fetch(featuresUrl);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                expectedFeatureNames = data.features;
+
+                // Limpa a mensagem de loading
+                featureInputsDiv.innerHTML = '';
+
+                // Cria um campo de input para cada feature
+                expectedFeatureNames.forEach(featureName => {
+                    const itemDiv = document.createElement('div');
+                    itemDiv.classList.add('feature-item');
+
+                    const label = document.createElement('label');
+                    label.textContent = featureName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) + ':'; // Formata o nome
+                    label.setAttribute('for', featureName); // Associa label ao input
+
+                    const input = document.createElement('input');
+                    input.setAttribute('type', 'number'); // Input tipo número
+                    input.setAttribute('step', 'any'); // Permite decimais
+                    input.setAttribute('id', featureName); // ID = nome da feature
+                    input.setAttribute('name', featureName); // Name = nome da feature
+                    input.setAttribute('required', 'true'); // Torna o campo obrigatório
+
+                    itemDiv.appendChild(label);
+                    itemDiv.appendChild(input);
+                    featureInputsDiv.appendChild(itemDiv);
+                });
+
+                // Ativa o botão depois de criar os inputs
+                predictButton.disabled = false;
+                predictButton.textContent = 'Obter Previsão';
+
+            } catch (error) {
+                console.error('Erro ao obter nomes das features ou criar inputs:', error);
+                featureInputsDiv.innerHTML = `<p style="color:red;">Erro ao carregar nomes das features: ${error.message}. Verifique se a API está ativa.</p>`;
+                // Mantém botão desativado em caso de erro
+                predictButton.disabled = true;
+                predictButton.textContent = 'Erro na API';
+            }
+        }
+
+        // Carregar nomes das features e criar inputs ao carregar a página
+        fetchAndCreateInputs();
+
+
+        predictButton.addEventListener('click', async () => {
+            resultadoDiv.textContent = 'A prever...';
+            resultadoDiv.className = 'loading'; // Muda a classe para estilizar
+
+            const valuesArray = [];
+            let allInputsValid = true;
+
+            // Coleta os valores dos inputs na ordem correta e valida
+            expectedFeatureNames.forEach(featureName => {
+                const inputElement = document.getElementById(featureName);
+                if (inputElement) {
+                    const value = parseFloat(inputElement.value.trim());
+                    if (isNaN(value)) {
+                        allInputsValid = false;
+                        inputElement.style.borderColor = 'red'; // Marca o input inválido
+                    } else {
+                         inputElement.style.borderColor = '#ccc'; // Restaura a borda
+                         valuesArray.push(value);
+                    }
+                } else {
+                     // Isto não deveria acontecer se os inputs foram criados corretamente
+                     console.error(`Input element for ${featureName} not found!`);
+                     allInputsValid = false;
+                }
+            });
+
+            if (!allInputsValid || valuesArray.length !== expectedFeatureNames.length) {
+                 resultadoDiv.textContent = 'Erro: Por favor, preencha todos os campos com números válidos.';
+                 resultadoDiv.className = 'error';
+                 return;
+            }
+
+
+            const payload = {
+                data: valuesArray
+            };
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                     const errorData = await response.json();
+                     throw new Error(`Erro na API: ${response.status} - ${errorData.detail ? (Array.isArray(errorData.detail) ? JSON.stringify(errorData.detail) : errorData.detail) : JSON.stringify(errorData)}`);
+                }
+
+                const data = await response.json();
+                resultadoDiv.textContent = `Previsão: ${data.prediction}`;
+                resultadoDiv.className = data.prediction.toLowerCase(); // Define a classe 'benigno' ou 'maligno'
+
+            } catch (error) {
+                console.error('Erro ao fazer a requisição:', error);
+                resultadoDiv.textContent = `Erro ao obter previsão: ${error.message}`;
+                resultadoDiv.className = 'error';
+            }
+        });
+    </script>
+
+</body>
+</html>
